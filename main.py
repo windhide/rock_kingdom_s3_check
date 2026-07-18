@@ -22,7 +22,7 @@ logging.basicConfig(
 logger = logging.getLogger("main")
 
 # ---- debug switch: set to True to enable region overlays + OCR print ----
-DEBUG = True
+DEBUG = False
 
 
 # ---------------------------------------------------------------------------
@@ -132,6 +132,7 @@ class App:
 
         self._debug = debug
         self._app = QApplication(sys.argv)
+        self._app.setApplicationName("加尔小助手")
         self._app.setQuitOnLastWindowClosed(False)
 
         try:

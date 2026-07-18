@@ -190,10 +190,17 @@ class Overlay(QWidget):
 
     def _build_tray(self) -> None:
         self._tray = QSystemTrayIcon(self)
-        self._tray.setToolTip("Rock Kingdom S3 Check")
-        self._tray.setIcon(self.style().standardIcon(
-            self.style().StandardPixmap.SP_ComputerIcon
-        ))
+        self._tray.setToolTip("加尔小助手")
+
+        # Load icon — bundled > local file > fallback
+        ico_path = self._resolve_icon()
+        if ico_path.exists():
+            from PySide6.QtGui import QIcon as QI
+            self._tray.setIcon(QI(str(ico_path)))
+        else:
+            self._tray.setIcon(self.style().standardIcon(
+                self.style().StandardPixmap.SP_ComputerIcon
+            ))
         menu = QMenu()
         show_act = QAction("显示 / 隐藏", self)
         show_act.triggered.connect(self._toggle_visible)
@@ -211,6 +218,17 @@ class Overlay(QWidget):
     # ------------------------------------------------------------------
     # Position & size — strictly within info percentages
     # ------------------------------------------------------------------
+    @staticmethod
+    def _resolve_icon() -> Any:
+        import sys
+        from pathlib import Path
+        if getattr(sys, "frozen", False):
+            p = Path(sys._MEIPASS) / "icon.ico"  # type: ignore[attr-defined]
+            if p.exists():
+                return p
+            return Path(sys.executable).parent / "icon.ico"
+        return Path("icon.ico")
+
     def set_target(self, hwnd: int | None) -> None:
         self._target_hwnd = hwnd
         if hwnd is None:

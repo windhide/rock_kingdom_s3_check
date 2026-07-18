@@ -50,7 +50,7 @@ def main() -> None:
         if p.exists():
             shutil.rmtree(p)
 
-    spec = HERE / "RockKingdomS3Check.spec"
+    spec = HERE / "加尔小助手.spec"
     if spec.exists():
         spec.unlink()
 
@@ -60,6 +60,11 @@ def main() -> None:
     cfg = HERE / "check.json"
     if cfg.exists():
         add_data.append(_datas_str(cfg, "."))
+
+    # icon
+    ico = HERE / "icon.ico"
+    if ico.exists():
+        add_data.append(_datas_str(ico, "."))
 
     # RapidOCR models
     for name in MODEL_FILES:
@@ -83,11 +88,13 @@ def main() -> None:
     # Build
     args = [
         str(HERE / "main.py"),
-        "--name=RockKingdomS3Check",
+        "--name=加尔小助手",
         "--onefile",
         "--noconsole",
         "--clean",
     ]
+    if ico.exists():
+        args.extend(["--icon", str(ico)])
     for d in add_data:
         args.extend(["--add-data", d])
 
@@ -113,7 +120,7 @@ def main() -> None:
     print("Running PyInstaller...")
     PyInstaller.__main__.run(args)
 
-    print(f"\nDone! Output: {HERE / 'dist' / 'RockKingdomS3Check.exe'}")
+    print(f"\nDone! Output: {HERE / 'dist' / '加尔小助手.exe'}")
 
 
 if __name__ == "__main__":
