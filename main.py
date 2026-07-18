@@ -147,13 +147,10 @@ class App:
         if debug:
             self._worker.debug_text.connect(self._on_debug_text)
 
-        from overlay import Overlay, CenterOverlay
+        from overlay import Overlay
         self._overlay = Overlay(self._config)
         self._overlay.closed.connect(self._on_overlay_closed)
         self._overlay.set_ocr_ready(False)
-
-        self._center = CenterOverlay()
-        self._center.show()
 
         # Debug region overlays
         self._debug_regions: dict[str, _DebugRegion] = {}
@@ -165,6 +162,7 @@ class App:
 
         self._hwnd: int | None = None
         self._processing = False
+        self._battle_cd_until: float = 0.0  # battle region cooldown
         self._overlay.show()
 
         self._overlay.set_status("正在初始化 OCR 引擎…")
@@ -197,7 +195,6 @@ class App:
         if hwnd is not None and is_window_valid(hwnd):
             self._hwnd = hwnd
             self._overlay.set_target(hwnd)
-            self._center.set_target(hwnd)
             self._overlay.set_status("")
             logger.info("Found target window: 0x%X", hwnd)
         else:
@@ -220,7 +217,11 @@ class App:
             return
 
         crops: dict[str, object] = {}
+        import time
         for rtype in ("dialog", "battle"):  # banner disabled
+            # Battle cooldown
+            if rtype == "battle" and time.time() < self._battle_cd_until:
+                continue
             rc = self._config.get_region(rtype)
             if rc is None:
                 continue
@@ -270,13 +271,10 @@ class App:
         if results:
             self._overlay.update_results(results)
 
-            # Update center overlay with current detections
-            dialog_specs = results.get("dialog", [])
-            battle_specs = results.get("battle", [])
-            self._center.set_current(
-                " ".join(dialog_specs) if dialog_specs else "",
-                " ".join(battle_specs) if battle_specs else "",
-            )
+            # Battle cooldown: 2.5s after any battle match
+            if results.get("battle"):
+                import time
+                self._battle_cd_until = time.time() + 2.5
 
         self._overlay.update_stats(self._matcher.stats)
 

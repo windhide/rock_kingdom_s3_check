@@ -44,15 +44,23 @@ class _SectionCard(QWidget):
         self._grid.setColumnStretch(1, 1)
         self._layout.addLayout(self._grid)
 
-    def add_row(self, label: str, value: str) -> None:
+    def add_row(self, label: str, value: str, color: str = "", val_color: str = "") -> None:
         row = self._grid.rowCount()
-        lbl = QLabel(label)
-        lbl.setStyleSheet("color: #c9d1d9;")
-        val = QLabel(value)
-        val.setStyleSheet("color: #58a6ff; font-weight: bold;")
-        val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self._grid.addWidget(lbl, row, 0)
-        self._grid.addWidget(val, row, 1)
+        c = color or "#c9d1d9"
+        vc = val_color or c
+        if value:
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {c};")
+            val = QLabel(value)
+            val.setStyleSheet(f"color: {vc}; font-weight: bold;")
+            val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self._grid.addWidget(lbl, row, 0)
+            self._grid.addWidget(val, row, 1)
+        else:
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: {c}; font-weight: bold;")
+            lbl.setAlignment(Qt.AlignCenter)
+            self._grid.addWidget(lbl, row, 0, 1, 2)
 
     def clear_rows(self) -> None:
         while self._grid.count():
@@ -157,6 +165,14 @@ class Overlay(QWidget):
         self._inner_layout.setContentsMargins(6, 6, 6, 6)
         self._inner_layout.setSpacing(2)
 
+        # 当前特性 — dialog detection only, no stats
+        self._dialog_card = _SectionCard("当前特性")
+        self._inner_layout.addWidget(self._dialog_card)
+
+        # 当前正战斗精灵种类 — battle detection only
+        self._battle_cur_card = _SectionCard("当前正战斗精灵种类")
+        self._inner_layout.addWidget(self._battle_cur_card)
+
         # 精灵种类 — battle counts
         self._battle_card = _SectionCard("精灵种类")
         self._inner_layout.addWidget(self._battle_card)
@@ -256,6 +272,8 @@ class Overlay(QWidget):
         f = _scale_font(11, ratio)
         self._btn_reset.setFont(f)
         self._btn_exit.setFont(_scale_font(12, ratio))
+        self._dialog_card.set_fonts(ratio)
+        self._battle_cur_card.set_fonts(ratio)
         self._battle_card.set_fonts(ratio)
         self._status_lbl.setFont(_scale_font(9, ratio))
 
@@ -280,11 +298,32 @@ class Overlay(QWidget):
     def _refresh_display(self) -> None:
         s = self._stats
 
+        # 当前特性 (dialog) — current detection only, blue
+        self._dialog_card.clear_rows()
+        current_d = self._specialty.get("dialog", [])
+        if current_d:
+            for spec in current_d:
+                self._dialog_card.add_row(spec, "", "#58a6ff")
+        else:
+            self._dialog_card.add_row("无", "", "#58a6ff")
+
+        # 当前正战斗精灵种类 (battle) — current detection only, blue
+        self._battle_cur_card.clear_rows()
+        current_b = self._specialty.get("battle", [])
+        if current_b:
+            for spec in current_b:
+                self._battle_cur_card.add_row(spec, "", "#58a6ff")
+        else:
+            self._battle_cur_card.add_row("无", "", "#58a6ff")
+
         # 精灵种类 (battle counts)
         self._battle_card.clear_rows()
         for key in ("奇异精灵_✔️", "混乱精灵_❌", "污染精灵_✔️", "异色精灵_✔️"):
             count = s.battle.get(key, 0)
-            self._battle_card.add_row(key.replace("_✔️", "").replace("_❌", ""), f"×{count}")
+            self._battle_card.add_row(
+                key.replace("_✔️", "").replace("_❌", ""), f"×{count}",
+                "#c9d1d9", "#58a6ff",
+            )
 
         if self._last_w > 0:
             self._apply_scale(self._last_w)
@@ -337,98 +376,3 @@ class Overlay(QWidget):
     def closeEvent(self, event: Any) -> None:
         self._tray.hide()
         super().closeEvent(event)
-
-
-# ---------------------------------------------------------------------------
-# Center overlay — current detections in the middle of the game window
-# ---------------------------------------------------------------------------
-class CenterOverlay(QWidget):
-    """Shows 当前特性 and 当前正战斗精灵种类 at the center of the game window."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self._target_hwnd: int | None = None
-
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 10, 16, 10)
-        layout.setSpacing(4)
-
-        self._dialog_lbl = QLabel()
-        self._dialog_lbl.setAlignment(Qt.AlignCenter)
-        self._dialog_lbl.setStyleSheet("color: #f0f6fc; font-weight: bold;")
-        layout.addWidget(self._dialog_lbl)
-
-        self._battle_lbl = QLabel()
-        self._battle_lbl.setAlignment(Qt.AlignCenter)
-        self._battle_lbl.setStyleSheet("color: #ffa657; font-weight: bold;")
-        layout.addWidget(self._battle_lbl)
-
-        self._pos_timer = QTimer(self)
-        self._pos_timer.timeout.connect(self._track)
-        self._pos_timer.start(200)
-
-    def set_target(self, hwnd: int | None) -> None:
-        self._target_hwnd = hwnd
-
-    def set_current(self, dialog_text: str, battle_text: str) -> None:
-        self._dialog_lbl.setText(f"当前特性：{dialog_text}" if dialog_text else "")
-        self._battle_lbl.setText(f"当前正战斗精灵种类：{battle_text}" if battle_text else "")
-        self._apply_size()
-
-    def _apply_size(self) -> None:
-        if self._target_hwnd is None:
-            return
-        from capture import get_content_rect
-        rect = get_content_rect(self._target_hwnd)
-        if rect is None:
-            return
-        cw = rect[2] - rect[0]
-        ch = rect[3] - rect[1]
-
-        ratio = min(cw / 1920.0, 1.5)
-        f = QFont("Microsoft YaHei", max(12, int(18 * ratio)))
-        self._dialog_lbl.setFont(f)
-        self._battle_lbl.setFont(f)
-
-    def _track(self) -> None:
-        if self._target_hwnd is None:
-            return
-        from capture import get_content_rect
-        rect = get_content_rect(self._target_hwnd)
-        if rect is None:
-            return
-        c_left, c_top, c_right, c_bottom = rect
-        cw, ch = c_right - c_left, c_bottom - c_top
-
-        # Center horizontally, ~52% from top vertically
-        x = c_left + int(cw * 0.25)
-        y = c_top + int(ch * 0.50)
-        w = int(cw * 0.50)
-        h = int(ch * 0.12)
-
-        hwnd_ov = int(self.winId())
-        hwnd_above = ctypes.windll.user32.GetWindow(self._target_hwnd, 3)
-        ctypes.windll.user32.SetWindowPos(
-            hwnd_ov, hwnd_above or 0, x, y, w, h,
-            0x0010,
-        )
-        dpr = self.devicePixelRatioF()
-        self.move(int(x / dpr), int(y / dpr))
-        self.resize(int(w / dpr), int(h / dpr))
-
-    def paintEvent(self, event: Any) -> None:
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        bg = QColor(13, 17, 23, 200)
-        painter.setBrush(bg)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRoundedRect(self.rect(), 10, 10)
-        painter.end()
