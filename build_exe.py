@@ -56,11 +56,6 @@ def main() -> None:
 
     add_data: list[str] = []
 
-    # check.json
-    cfg = HERE / "check.json"
-    if cfg.exists():
-        add_data.append(_datas_str(cfg, "."))
-
     # icon
     ico = HERE / "icon.ico"
     if ico.exists():
@@ -120,7 +115,14 @@ def main() -> None:
     print("Running PyInstaller...")
     PyInstaller.__main__.run(args)
 
-    print(f"\nDone! Output: {HERE / 'dist' / '加尔小助手.exe'}")
+    dist_exe = HERE / "dist" / "加尔小助手.exe"
+    if dist_exe.exists():
+        print(f"\nDone! Output: {dist_exe} ({dist_exe.stat().st_size // (1024*1024)}MB)")
+    else:
+        # PyInstaller may have appended .exe already
+        alt = HERE / "dist" / "加尔小助手"
+        if alt.with_suffix(".exe").exists():
+            print(f"\nDone! Output: {alt.with_suffix('.exe')}")
 
 
 if __name__ == "__main__":

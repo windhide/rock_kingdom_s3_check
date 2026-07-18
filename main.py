@@ -135,11 +135,6 @@ class App:
         self._app.setApplicationName("加尔小助手")
         self._app.setQuitOnLastWindowClosed(False)
 
-        try:
-            ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        except Exception:
-            pass
-
         self._ocr = OCREngine()
         self._matcher = Matcher(self._config, debounce_seconds=5.0)
         self._worker = ProcessWorker(self._ocr, self._matcher, self._config, debug=debug)
@@ -164,7 +159,17 @@ class App:
         self._hwnd: int | None = None
         self._processing = False
         self._battle_cd_until: float = 0.0  # battle region cooldown
+
+        # Show overlay at default visible position immediately
+        self._overlay.setGeometry(100, 100, 280, 450)
         self._overlay.show()
+        self._overlay.raise_()
+        # Ensure the window is physically visible
+        hwnd_ov = int(self._overlay.winId())
+        ctypes.windll.user32.SetWindowPos(
+            hwnd_ov, 0, 100, 100, 280, 450,
+            0x0010,  # SWP_NOACTIVATE
+        )
 
         self._overlay.set_status("正在初始化 OCR 引擎…")
         QTimer.singleShot(100, self._init_ocr)
@@ -312,12 +317,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # DPI awareness MUST be set before QApplication
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        pass
+
     # CLI flag overrides code constant
     debug = DEBUG if args.debug is None else args.debug
-
-    if not Path(args.config).exists():
-        logger.error("Config file not found: %s", args.config)
-        sys.exit(1)
 
     app = App(args.config, debug=debug)
     sys.exit(app.run())
