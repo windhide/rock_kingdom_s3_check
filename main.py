@@ -147,15 +147,18 @@ class App:
         if debug:
             self._worker.debug_text.connect(self._on_debug_text)
 
-        from overlay import Overlay
+        from overlay import Overlay, CenterOverlay
         self._overlay = Overlay(self._config)
         self._overlay.closed.connect(self._on_overlay_closed)
         self._overlay.set_ocr_ready(False)
 
+        self._center = CenterOverlay()
+        self._center.show()
+
         # Debug region overlays
         self._debug_regions: dict[str, _DebugRegion] = {}
         if debug:
-            for rtype in ("dialog", "battle", "banner"):
+            for rtype in ("dialog", "battle"):  # banner disabled
                 w = _DebugRegion()
                 w.show()
                 self._debug_regions[rtype] = w
@@ -194,6 +197,7 @@ class App:
         if hwnd is not None and is_window_valid(hwnd):
             self._hwnd = hwnd
             self._overlay.set_target(hwnd)
+            self._center.set_target(hwnd)
             self._overlay.set_status("")
             logger.info("Found target window: 0x%X", hwnd)
         else:
@@ -216,7 +220,7 @@ class App:
             return
 
         crops: dict[str, object] = {}
-        for rtype in ("dialog", "battle", "banner"):
+        for rtype in ("dialog", "battle"):  # banner disabled
             rc = self._config.get_region(rtype)
             if rc is None:
                 continue
@@ -265,6 +269,15 @@ class App:
         self._processing = False
         if results:
             self._overlay.update_results(results)
+
+            # Update center overlay with current detections
+            dialog_specs = results.get("dialog", [])
+            battle_specs = results.get("battle", [])
+            self._center.set_current(
+                " ".join(dialog_specs) if dialog_specs else "",
+                " ".join(battle_specs) if battle_specs else "",
+            )
+
         self._overlay.update_stats(self._matcher.stats)
 
     def _on_status(self, text: str) -> None:

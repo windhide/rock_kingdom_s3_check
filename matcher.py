@@ -55,11 +55,12 @@ class Matcher:
             self.stats.dialog[specialty] = self.stats.dialog.get(specialty, 0) + 1
         elif region_type == "battle":
             self.stats.battle[specialty] = self.stats.battle.get(specialty, 0) + 1
-        elif region_type == "banner":
-            if "不占保底" in specialty:
-                self.stats.banner_special += 1
-            else:
-                self.stats.banner_regular += 1
+        # Banner disabled
+        # elif region_type == "banner":
+        #     if "不占保底" in specialty:
+        #         self.stats.banner_special += 1
+        #     else:
+        #         self.stats.banner_regular += 1
         # Increment ball count on new dialog or battle detection
         if region_type in ("dialog", "battle"):
             self.stats.ball_count += 1
