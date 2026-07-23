@@ -120,7 +120,7 @@ class ProcessWorker(QThread):
 
 # ---------------------------------------------------------------------------
 class App:
-    REFRESH_MS = 300
+    REFRESH_MS = 500
 
     def __init__(self, config_path: str, debug: bool = False) -> None:
         self._config = ConfigManager(config_path)
@@ -158,7 +158,8 @@ class App:
 
         self._hwnd: int | None = None
         self._processing = False
-        self._battle_cd_until: float = 0.0  # battle region cooldown
+        self._battle_cd_until: float = 0.0
+        self._last_frame_hash: dict[str, int] = {}  # region → hash
 
         # Show overlay at default visible position immediately
         self._overlay.setGeometry(100, 100, 280, 450)
@@ -191,7 +192,7 @@ class App:
         if self._debug:
             self._debug_timer = QTimer()
             self._debug_timer.timeout.connect(self._update_debug_regions)
-            self._debug_timer.start(200)
+            self._debug_timer.start(500)
 
         self._find_target()
 
@@ -215,6 +216,12 @@ class App:
             if self._hwnd is None:
                 return
 
+        # Skip when game window is not the foreground window
+        import time
+        fg = ctypes.windll.user32.GetForegroundWindow()
+        if fg != self._hwnd:
+            return
+
         if self._processing:
             return
 
@@ -223,17 +230,27 @@ class App:
             return
 
         crops: dict[str, object] = {}
-        import time
-        for rtype in ("dialog", "battle"):  # banner disabled
-            # Battle cooldown
+        import hashlib
+        for rtype in ("dialog", "battle"):
+            # Battle cooldown only
             if rtype == "battle" and time.time() < self._battle_cd_until:
                 continue
+
             rc = self._config.get_region(rtype)
             if rc is None:
                 continue
             cropped = crop_region(img, rc)
-            if cropped is not None:
-                crops[rtype] = cropped
+            if cropped is None:
+                continue
+
+            # Skip battle if frame unchanged (dialog always processed)
+            if rtype == "battle":
+                h = hash(cropped.tobytes())
+                if h == self._last_frame_hash.get(rtype):
+                    continue
+                self._last_frame_hash[rtype] = h
+
+            crops[rtype] = cropped
 
         if crops:
             self._processing = True
@@ -277,7 +294,7 @@ class App:
         if results:
             self._overlay.update_results(results)
 
-            # Battle cooldown: 2.5s after any battle match
+            # Battle cooldown: 2.5s after a match
             if results.get("battle"):
                 import time
                 self._battle_cd_until = time.time() + 2.5

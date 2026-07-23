@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image, ImageFilter
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,19 @@ class OCREngine:
         if self._engine is not None:
             return True
         try:
+            # Limit ONNX Runtime threads to reduce CPU
+            import os
+            os.environ.setdefault("OMP_NUM_THREADS", "2")
+            os.environ.setdefault("MKL_NUM_THREADS", "2")
+
             from rapidocr_onnxruntime import RapidOCR
 
             self._engine = RapidOCR(
                 text_det_thresh=0.3,
                 text_det_box_thresh=0.3,
+                use_angle_cls=False,   # game text is always horizontal
+                use_text_det=True,
+                text_score=0.5,
             )
             logger.info("RapidOCR initialized")
             return True
@@ -33,18 +41,15 @@ class OCREngine:
             logger.error("Failed to initialize RapidOCR: %s", exc)
             return False
 
-    def _preprocess(self, img: Image.Image, invert: bool = False) -> np.ndarray:
-        """Prepare image for OCR: upscale, grayscale, contrast-stretch, denoise."""
+    def _preprocess(self, img: Image.Image) -> np.ndarray:
+        """Prepare image for OCR: downscale, grayscale, contrast-stretch, denoise."""
         w, h = img.size
 
-        # Upscale small text regions
-        scale = 1
-        if h < 40:
-            scale = 3
-        elif h < 70:
-            scale = 2
-        if scale > 1:
-            img = img.resize((w * scale, h * scale), Image.LANCZOS)
+        # Downscale large images to save CPU
+        max_dim = 480
+        if max(w, h) > max_dim:
+            ratio = max_dim / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
 
         if img.mode != "L":
             img = img.convert("L")
@@ -56,14 +61,9 @@ class OCREngine:
             arr = np.clip((arr - p2) * 255.0 / (p98 - p2), 0, 255).astype(np.uint8)
         img = Image.fromarray(arr)
 
-        # Light sharpen
+        # Light sharpen + denoise
         img = img.filter(ImageFilter.SHARPEN)
-
-        # Denoise
         img = img.filter(ImageFilter.MedianFilter(3))
-
-        if invert:
-            img = ImageOps.invert(img)
 
         return np.array(img)
 
@@ -75,16 +75,11 @@ class OCREngine:
         return " ".join(texts)
 
     def recognize(self, img: Image.Image) -> str:
-        """Return all recognized text, trying both normal and inverted."""
+        """Return all recognized text."""
         if not self.ready:
             return ""
         try:
-            # Try normal first
-            text = self._ocr_image(self._preprocess(img, invert=False))
-            if text.strip():
-                return text
-            # Fallback: try inverted (light text on dark bg)
-            return self._ocr_image(self._preprocess(img, invert=True))
+            return self._ocr_image(self._preprocess(img))
         except Exception:
             return ""
 

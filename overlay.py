@@ -102,7 +102,7 @@ class Overlay(QWidget):
 
         self._pos_timer = QTimer(self)
         self._pos_timer.timeout.connect(self._track_position)
-        self._pos_timer.start(200)
+        self._pos_timer.start(500)
 
     # ------------------------------------------------------------------
     # UI
